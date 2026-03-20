@@ -6,28 +6,25 @@ import os
 import csv
 import pickle
 from datetime import datetime
-import io
-import base64
 import threading
 
 app = Flask(__name__)
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
+# Paths
 DATASET_PATH = "dataset"
 ENCODINGS_FILE = "face_encodings.pkl"
 ATTENDANCE_FILE = "attendance.csv"
 
 os.makedirs(DATASET_PATH, exist_ok=True)
 
-# ── In-memory state ────────────────────────────────────────────────────────────
+# In-memory state
 encode_list_known = []
 person_names = []
 camera_active = False
-camera_lock = threading.Lock()
 cap = None
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-# ── Helper: encode faces from dataset ──────────────────────────────────────────
+# Helper: encode faces from dataset
 def load_encodings():
     global encode_list_known, person_names
     enc_list, valid_names = [], []
@@ -42,11 +39,12 @@ def load_encodings():
             continue
 
         img = np.ascontiguousarray(img, dtype=np.uint8)
-        if len(img.shape) == 3 and img.shape[2] == 4:
-           img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
-        # Resize to 50% — face_recognition works better on smaller images
-        img = cv2.resize(img, (0,0), None, 0.5, 0.5)
+        if len(img.shape) == 3 and img.shape[2] == 4:
+            img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+
+        
+        img = cv2.resize(img, (0, 0), None, 0.5, 0.5)
 
         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         rgb = np.ascontiguousarray(rgb, dtype=np.uint8)
@@ -56,10 +54,9 @@ def load_encodings():
         if not locs:
             print(f"✗ No face detected in {fname}, skipping.")
             continue
-        face_locs = locs
 
         try:
-            encs = face_recognition.face_encodings(rgb, known_face_locations=face_locs)
+            encs = face_recognition.face_encodings(rgb, known_face_locations=locs)
             if encs:
                 enc_list.append(encs[0])
                 valid_names.append(os.path.splitext(fname)[0])
@@ -78,15 +75,7 @@ def load_encodings():
     print(f"Total encoded: {len(valid_names)} → {valid_names}")
     return len(valid_names)
 
-def try_load_from_pickle():
-    global encode_list_known, person_names
-    if os.path.exists(ENCODINGS_FILE):
-        with open(ENCODINGS_FILE, "rb") as f:
-            data = pickle.load(f)
-        encode_list_known = data.get("encodings", [])
-        person_names = data.get("names", [])
-
-# ── Helper: mark attendance ────────────────────────────────────────────────────
+# Helper: mark attendance 
 def mark_attendance(name):
     now = datetime.now()
     date_str = now.strftime("%d/%m/%Y")
@@ -109,7 +98,7 @@ def mark_attendance(name):
         return True
     return False
 
-# ── Video generator ────────────────────────────────────────────────────────────
+# Video generator 
 def generate_frames():
     global cap, camera_active
 
@@ -151,11 +140,11 @@ def generate_frames():
                     y2 = min(h, int(detections[0, 0, i, 6] * h))
 
                     name = "UNKNOWN"
-                    if encode_list_known and (x2-x1) > 20 and (y2-y1) > 20:
-                        small = cv2.resize(frame, (0,0), None, 0.5, 0.5)
+                    if encode_list_known and (x2 - x1) > 20 and (y2 - y1) > 20:
+                        small = cv2.resize(frame, (0, 0), None, 0.5, 0.5)
                         rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
                         rgb = np.ascontiguousarray(rgb, dtype=np.uint8)
-                        face_loc = [(y1//2, x2//2, y2//2, x1//2)]
+                        face_loc = [(y1 // 2, x2 // 2, y2 // 2, x1 // 2)]
                         encs = face_recognition.face_encodings(rgb, known_face_locations=face_loc)
                         if encs:
                             distances = face_recognition.face_distance(encode_list_known, encs[0])
@@ -170,7 +159,7 @@ def generate_frames():
             last_results.extend(results)
             recognition_running[0] = False
 
-    # Start recognition in background thread
+    
     t = threading.Thread(target=recognition_worker, daemon=True)
     t.start()
 
@@ -179,15 +168,13 @@ def generate_frames():
         if not ret or frame is None:
             continue
 
-        # Send latest frame to recognition thread (non-blocking)
         latest_frame[0] = frame.copy()
 
-        # Draw last known results immediately — no waiting
         for (x1, y1, x2, y2, name) in last_results:
             color = (0, 220, 120) if name != "UNKNOWN" else (0, 60, 220)
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.rectangle(frame, (x1, y2-36), (x2, y2), color, cv2.FILLED)
-            cv2.putText(frame, name, (x1+6, y2-8),
+            cv2.rectangle(frame, (x1, y2 - 36), (x2, y2), color, cv2.FILLED)
+            cv2.putText(frame, name, (x1 + 6, y2 - 8),
                         cv2.FONT_HERSHEY_DUPLEX, 0.7, (255, 255, 255), 1)
 
         _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
@@ -195,7 +182,8 @@ def generate_frames():
                buffer.tobytes() + b"\r\n")
 
     cap.release()
-# ── Routes ─────────────────────────────────────────────────────────────────────
+
+# Routes 
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -217,7 +205,7 @@ def get_attendance():
     if os.path.exists(ATTENDANCE_FILE):
         with open(ATTENDANCE_FILE, "r") as f:
             records = list(csv.DictReader(f))
-    return jsonify(records[::-1])  # newest first
+    return jsonify(records[::-1])
 
 @app.route("/persons")
 def get_persons():
@@ -277,7 +265,7 @@ def reload_encodings():
     count = load_encodings()
     return jsonify({"message": f"Encodings reloaded. {count} person(s) loaded."})
 
-# ── Boot ───────────────────────────────────────────────────────────────────────
+#  Boot
 if __name__ == "__main__":
     print("Loading face encodings from dataset...")
     count = load_encodings()
