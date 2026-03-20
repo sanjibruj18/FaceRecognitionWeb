@@ -16,7 +16,7 @@
 
 html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-mono); }
 
-/* ── LAYOUT ─────────────────────────────────────── */
+/* LAYOUT */
 .shell {
   display: grid;
   grid-template-rows: 60px 1fr;
@@ -24,7 +24,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   min-height: 100vh;
 }
 
-/* ── HEADER ─────────────────────────────────────── */
+/* HEADER */
 header {
   grid-column: 1 / -1;
   display: flex;
@@ -43,7 +43,7 @@ header h1 span { color: var(--accent); }
 #live-badge { font-size: .7rem; padding: 3px 10px; border-radius: 20px; background: #1a2a1a; color: var(--accent); border: 1px solid var(--accent); display: none; }
 #live-badge.on { display: inline-block; }
 
-/* ── SIDEBAR ─────────────────────────────────────── */
+/* SIDEBAR  */
 nav {
   border-right: 1px solid var(--border);
   background: var(--surface);
@@ -68,7 +68,7 @@ nav a:hover, nav a.active {
 nav a svg { flex-shrink: 0; }
 .nav-label { font-size: .65rem; color: var(--muted); padding: 18px 22px 6px; text-transform: uppercase; letter-spacing: 1px; }
 
-/* ── MAIN ─────────────────────────────────────────── */
+/* MAIN */
 main { padding: 32px; overflow-y: auto; }
 
 .section { display: none; }
@@ -78,7 +78,7 @@ main { padding: 32px; overflow-y: auto; }
 h2 { font-family: var(--font-head); font-size: 1.5rem; font-weight: 700; margin-bottom: 6px; }
 .subtitle { color: var(--muted); font-size: .8rem; margin-bottom: 28px; }
 
-/* ── CAMERA ─────────────────────────────────────── */
+/*  CAMERA  */
 .cam-wrap {
   position: relative;
   background: #000;
@@ -116,7 +116,7 @@ h2 { font-family: var(--font-head); font-size: 1.5rem; font-weight: 700; margin-
 .btn-ghost   { background: var(--border); color: var(--text); }
 .btn-ghost:hover { background: #2a3040; }
 
-/* ── ATTENDANCE TABLE ─────────────────────────────── */
+/* ATTENDANCE TABLE  */
 .table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; max-width: 860px; }
 table { width: 100%; border-collapse: collapse; }
 thead { background: #151820; }
@@ -137,7 +137,7 @@ tbody tr:hover { background: rgba(255,255,255,.02); }
 }
 .search-box:focus { border-color: var(--accent); }
 
-/* ── PERSONS ──────────────────────────────────────── */
+/* PERSONS  */
 .person-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; max-width: 860px; }
 .person-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
@@ -153,7 +153,7 @@ tbody tr:hover { background: rgba(255,255,255,.02); }
 }
 .del-btn:hover { color: var(--danger); }
 
-/* ── ADD PERSON FORM ──────────────────────────────── */
+/*  ADD PERSON FORM  */
 .form-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; max-width: 480px; }
 .form-group { margin-bottom: 18px; }
 label { display: block; font-size: .75rem; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
@@ -165,7 +165,7 @@ input[type=text], input[type=file] {
 input[type=text]:focus { border-color: var(--accent); }
 input[type=file] { cursor: pointer; padding: 8px 12px; }
 
-/* ── TOAST ─────────────────────────────────────────── */
+/* TOAST */
 #toast {
   position: fixed; bottom: 28px; right: 28px; z-index: 999;
   background: var(--surface); border: 1px solid var(--border);
@@ -179,7 +179,7 @@ input[type=file] { cursor: pointer; padding: 8px 12px; }
 #toast.success { border-color: var(--accent); }
 #toast.error   { border-color: var(--danger); }
 
-/* ── STATS ROW ─────────────────────────────────────── */
+/* STATS ROW  */
 .stats { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
 .stat-box {
   background: var(--surface); border: 1px solid var(--border);

@@ -1,4 +1,4 @@
-// ── Section navigation ──────────────────────────────
+// Section navigation 
 function showSection(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
@@ -9,7 +9,7 @@ function showSection(id) {
   if (id === 'persons') loadPersons();
 }
 
-// ── Toast ───────────────────────────────────────────
+// Toast 
 function toast(msg, type = 'success') {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -17,7 +17,7 @@ function toast(msg, type = 'success') {
   setTimeout(() => { t.className = ''; }, 3200);
 }
 
-// ── Camera ──────────────────────────────────────────
+// Camera 
 function startCamera() {
   const feed = document.getElementById('cam-feed');
   feed.src = '/video_feed?' + Date.now();
@@ -41,7 +41,7 @@ function stopCamera() {
   document.getElementById('live-badge').classList.remove('on');
 }
 
-// ── Attendance ──────────────────────────────────────
+// Attendance 
 let allRecords = [];
 
 async function loadAttendance() {
@@ -88,7 +88,7 @@ function exportCSV() {
   window.location.href = '/export_csv';
 }
 
-// ── Persons ─────────────────────────────────────────
+// Persons 
 async function loadPersons() {
   const res = await fetch('/persons');
   const names = await res.json();
@@ -127,7 +127,7 @@ async function removePerson(name) {
   if (res.ok) loadPersons();
 }
 
-// ── Add Person ──────────────────────────────────────
+// Add Person 
 async function addPerson() {
   const name = document.getElementById('inp-name').value.trim();
   const file = document.getElementById('inp-file').files[0];
@@ -147,5 +147,5 @@ async function addPerson() {
   }
 }
 
-// ── Boot ────────────────────────────────────────────
+// Boot 
 loadAttendance();
