@@ -3,4 +3,3 @@ __pycache__/
 *.pkl
 attendance.csv
 *.whl
-test_encode.py
