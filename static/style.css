@@ -1,4 +1,12 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.hamburger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  padding: 4px;
+  margin-right: 8px;
+}
 
 :root {
   --bg:        #0a0c0f;
@@ -117,11 +125,19 @@ h2 { font-family: var(--font-head); font-size: 1.5rem; font-weight: 700; margin-
 .btn-ghost:hover { background: #2a3040; }
 
 /* ATTENDANCE TABLE  */
-.table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; max-width: 860px; }
-table { width: 100%; border-collapse: collapse; }
+.table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* ✅ Allow horizontal scroll on mobile instead of clipping */
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 860px;
+  -webkit-overflow-scrolling: touch;
+}
+table { width: 100%; border-collapse: collapse; min-width: 480px; }
 thead { background: #151820; }
-th { padding: 12px 18px; text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
-td { padding: 12px 18px; font-size: .82rem; border-top: 1px solid var(--border); }
+th { padding: 12px 18px; text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); white-space: nowrap; }
+td { padding: 12px 18px; font-size: .82rem; border-top: 1px solid var(--border); white-space: nowrap; }
 tbody tr:hover { background: rgba(255,255,255,.02); }
 .badge-name {
   background: rgba(0,229,160,.1); color: var(--accent);
@@ -136,6 +152,28 @@ tbody tr:hover { background: rgba(255,255,255,.02); }
   outline: none;
 }
 .search-box:focus { border-color: var(--accent); }
+
+/* ── Delete button inside attendance table rows ── */
+.del-att-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 5px 7px;
+  display: inline-flex;
+  align-items: center;
+  transition: color .2s, border-color .2s, background .2s;
+}
+.del-att-btn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(255, 59, 92, 0.08);
+}
+
+/* Action column header alignment */
+th.col-action { text-align: center; width: 60px; }
+td.col-action { text-align: center; }
 
 /* PERSONS  */
 .person-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; max-width: 860px; }
@@ -190,5 +228,48 @@ input[type=file] { cursor: pointer; padding: 8px 12px; }
 
 @media (max-width: 640px) {
   .shell { grid-template-columns: 1fr; }
-  nav { display: none; }
+  nav {
+    display: flex;
+    position: fixed;
+    left: -220px;
+    top: 60px;
+    bottom: 0;
+    width: 220px;
+    z-index: 100;
+    transition: left .3s ease;
+    box-shadow: 4px 0 20px rgba(0,0,0,.4);
+  }
+  nav.open { left: 0; }
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    z-index: 99;
+    top: 60px;
+  }
+  .overlay.show { display: block; }
+  .hamburger { display: flex; }
+
+  /* Main padding tighter on mobile */
+  main { padding: 16px; }
+
+  /* Table: tighter cells so all 5 columns fit in scroll view */
+  th, td { padding: 9px 8px; font-size: .72rem; }
+  .badge-name { padding: 2px 6px; font-size: .68rem; }
+  .del-att-btn { padding: 4px 5px; }
+
+  /* Toolbar: stack search on its own line, buttons wrap */
+  .toolbar { flex-wrap: wrap; gap: 8px; }
+  .search-box { min-width: 100%; order: -1; }
+  .toolbar .btn { padding: 8px 12px; font-size: .75rem; }
+
+  /* Stats boxes smaller on mobile */
+  .stat-box { padding: 14px 16px; }
+  .stat-box .val { font-size: 1.5rem; }
+}
+
+@media (min-width: 641px) {
+  .hamburger { display: none; }
+  .overlay { display: none; }
 }

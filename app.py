@@ -1,30 +1,25 @@
-from flask import Flask, render_template, Response, jsonify, request, send_file
+from flask import Flask, render_template, jsonify, request, send_file
 import cv2
 import numpy as np
 import face_recognition
 import os
 import csv
-import pickle
 from datetime import datetime
-import threading
+import base64
 
 app = Flask(__name__)
 
-# Paths
+# Paths 
 DATASET_PATH = "dataset"
-ENCODINGS_FILE = "face_encodings.pkl"
 ATTENDANCE_FILE = "attendance.csv"
 
 os.makedirs(DATASET_PATH, exist_ok=True)
 
-# In-memory state
+# In-memory state 
 encode_list_known = []
 person_names = []
-camera_active = False
-cap = None
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-# Helper: encode faces from dataset
+# Helper: encode faces from dataset 
 def load_encodings():
     global encode_list_known, person_names
     enc_list, valid_names = [], []
@@ -39,18 +34,14 @@ def load_encodings():
             continue
 
         img = np.ascontiguousarray(img, dtype=np.uint8)
-
         if len(img.shape) == 3 and img.shape[2] == 4:
             img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
-        
         img = cv2.resize(img, (0, 0), None, 0.5, 0.5)
-
         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         rgb = np.ascontiguousarray(rgb, dtype=np.uint8)
 
         locs = face_recognition.face_locations(rgb, model='hog')
-
         if not locs:
             print(f"✗ No face detected in {fname}, skipping.")
             continue
@@ -68,10 +59,6 @@ def load_encodings():
 
     encode_list_known = enc_list
     person_names = valid_names
-
-    with open(ENCODINGS_FILE, "wb") as f:
-        pickle.dump({"encodings": enc_list, "names": valid_names}, f)
-
     print(f"Total encoded: {len(valid_names)} → {valid_names}")
     return len(valid_names)
 
@@ -98,49 +85,47 @@ def mark_attendance(name):
         return True
     return False
 
-# Video generator 
-def generate_frames():
-    global cap, camera_active
+# WebRTC: process frame sent from browser 
+@app.route("/process_frame", methods=["POST"])
+def process_frame():
+    data = request.json.get("frame", "")
+    if not data:
+        return jsonify({"faces": []})
 
-    net = cv2.dnn.readNetFromTensorflow(
-        'opencv_face_detector_uint8.pb',
-        'opencv_face_detector.pbtxt'
-    )
+    try:
+        header, encoded = data.split(",", 1)
+        img_bytes = base64.b64decode(encoded)
+        np_arr = np.frombuffer(img_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 480)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-    camera_active = True
+        if frame is None:
+            return jsonify({"faces": []})
 
-    last_results = []
-    latest_frame = [None]
-    recognition_running = [False]
+        frame = np.ascontiguousarray(frame, dtype=np.uint8)
+        h, w = frame.shape[:2]
 
-    def recognition_worker():
-        while camera_active:
-            if latest_frame[0] is None or recognition_running[0]:
-                continue
-            recognition_running[0] = True
-            frame = latest_frame[0].copy()
-            h, w = frame.shape[:2]
-            results = []
-            try:
-                blob = cv2.dnn.blobFromImage(frame, 1.0, (128, 128),
-                                             [104, 117, 123], False, False)
-                net.setInput(blob)
-                detections = net.forward()
+        net = app.config.get("dnn_net")
+        faces_data = []
 
-                for i in range(detections.shape[2]):
-                    confidence = detections[0, 0, i, 2]
-                    if confidence < 0.7:
-                        continue
-                    x1 = max(0, int(detections[0, 0, i, 3] * w))
-                    y1 = max(0, int(detections[0, 0, i, 4] * h))
-                    x2 = min(w, int(detections[0, 0, i, 5] * w))
-                    y2 = min(h, int(detections[0, 0, i, 6] * h))
+        if net is not None:
+            blob = cv2.dnn.blobFromImage(frame, 1.0, (128, 128),
+                                         [104, 117, 123], False, False)
+            net.setInput(blob)
+            detections = net.forward()
 
-                    name = "UNKNOWN"
-                    if encode_list_known and (x2 - x1) > 20 and (y2 - y1) > 20:
+            for i in range(detections.shape[2]):
+                confidence = detections[0, 0, i, 2]
+                if confidence < 0.7:
+                    continue
+
+                x1 = max(0, int(detections[0, 0, i, 3] * w))
+                y1 = max(0, int(detections[0, 0, i, 4] * h))
+                x2 = min(w, int(detections[0, 0, i, 5] * w))
+                y2 = min(h, int(detections[0, 0, i, 6] * h))
+
+                name = "UNKNOWN"
+                if encode_list_known and (x2 - x1) > 20 and (y2 - y1) > 20:
+                    try:
                         small = cv2.resize(frame, (0, 0), None, 0.5, 0.5)
                         rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
                         rgb = np.ascontiguousarray(rgb, dtype=np.uint8)
@@ -152,52 +137,25 @@ def generate_frames():
                             if distances[idx] < 0.6:
                                 name = person_names[idx].upper()
                                 mark_attendance(name)
-                    results.append((x1, y1, x2, y2, name))
-            except Exception:
-                pass
-            last_results.clear()
-            last_results.extend(results)
-            recognition_running[0] = False
+                    except Exception:
+                        pass
 
-    
-    t = threading.Thread(target=recognition_worker, daemon=True)
-    t.start()
+                faces_data.append({
+                    "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+                    "name": name,
+                    "confidence": round(float(confidence), 2)
+                })
 
-    while camera_active:
-        ret, frame = cap.read()
-        if not ret or frame is None:
-            continue
+        return jsonify({"faces": faces_data})
 
-        latest_frame[0] = frame.copy()
+    except Exception as e:
+        print(f"Frame processing error: {e}")
+        return jsonify({"faces": []})
 
-        for (x1, y1, x2, y2, name) in last_results:
-            color = (0, 220, 120) if name != "UNKNOWN" else (0, 60, 220)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.rectangle(frame, (x1, y2 - 36), (x2, y2), color, cv2.FILLED)
-            cv2.putText(frame, name, (x1 + 6, y2 - 8),
-                        cv2.FONT_HERSHEY_DUPLEX, 0.7, (255, 255, 255), 1)
-
-        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
-        yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" +
-               buffer.tobytes() + b"\r\n")
-
-    cap.release()
-
-# Routes 
+# Routes
 @app.route("/")
 def index():
     return render_template("index.html")
-
-@app.route("/video_feed")
-def video_feed():
-    return Response(generate_frames(),
-                    mimetype="multipart/x-mixed-replace; boundary=frame")
-
-@app.route("/stop_camera", methods=["POST"])
-def stop_camera():
-    global camera_active
-    camera_active = False
-    return jsonify({"status": "stopped"})
 
 @app.route("/attendance")
 def get_attendance():
@@ -206,6 +164,55 @@ def get_attendance():
         with open(ATTENDANCE_FILE, "r") as f:
             records = list(csv.DictReader(f))
     return jsonify(records[::-1])
+
+@app.route("/delete_attendance", methods=["POST"])
+def delete_attendance():
+    body = request.json
+    name = body.get("name", "").strip().upper()
+    time_val = body.get("time", "").strip()
+    date_val = body.get("date", "").strip()
+
+    if not name or not time_val or not date_val:
+        return jsonify({"error": "name, time and date are required"}), 400
+
+    if not os.path.exists(ATTENDANCE_FILE):
+        return jsonify({"error": "No attendance file found"}), 404
+
+    kept = []
+    deleted = False
+
+    with open(ATTENDANCE_FILE, "r", newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames or ["Name", "Time", "Date"]
+        for row in reader:
+            if (row.get("Name", "").upper() == name
+                    and row.get("Time", "").strip() == time_val
+                    and row.get("Date", "").strip() == date_val
+                    and not deleted):
+                deleted = True
+            else:
+                kept.append(row)
+
+    if not deleted:
+        return jsonify({"error": "Record not found"}), 404
+
+    with open(ATTENDANCE_FILE, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(kept)
+
+    return jsonify({"message": f"Record for {name} on {date_val} deleted."})
+
+@app.route("/clear_attendance", methods=["POST"])
+def clear_attendance():
+    if not os.path.exists(ATTENDANCE_FILE):
+        return jsonify({"error": "No attendance file found"}), 404
+
+    with open(ATTENDANCE_FILE, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["Name", "Time", "Date"])
+        writer.writeheader()
+
+    return jsonify({"message": "All attendance records cleared."})
 
 @app.route("/persons")
 def get_persons():
@@ -260,14 +267,15 @@ def dataset_img(name):
             return send_file(p)
     return "", 404
 
-@app.route("/reload_encodings", methods=["POST"])
-def reload_encodings():
-    count = load_encodings()
-    return jsonify({"message": f"Encodings reloaded. {count} person(s) loaded."})
-
-#  Boot
+# Boot 
 if __name__ == "__main__":
+    print("Loading DNN face detector...")
+    net = cv2.dnn.readNetFromTensorflow(
+        'opencv_face_detector_uint8.pb',
+        'opencv_face_detector.pbtxt'
+    )
+    app.config["dnn_net"] = net
     print("Loading face encodings from dataset...")
     count = load_encodings()
     print(f"Ready! {count} person(s) loaded.")
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=False, host="0.0.0.0", port=5000)

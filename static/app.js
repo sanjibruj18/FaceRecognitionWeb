@@ -1,12 +1,21 @@
+// Mobile nav toggle 
+function toggleNav() {
+  const nav = document.querySelector('nav');
+  const overlay = document.getElementById('overlay');
+  nav.classList.toggle('open');
+  overlay.classList.toggle('show');
+}
+
 // Section navigation 
 function showSection(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
   document.getElementById('section-' + id).classList.add('active');
   document.querySelector(`nav a[data-section="${id}"]`).classList.add('active');
-
   if (id === 'attendance') loadAttendance();
   if (id === 'persons') loadPersons();
+  document.querySelector('nav').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
 }
 
 // Toast 
@@ -17,23 +26,54 @@ function toast(msg, type = 'success') {
   setTimeout(() => { t.className = ''; }, 3200);
 }
 
-// Camera 
-function startCamera() {
-  const feed = document.getElementById('cam-feed');
-  feed.src = '/video_feed?' + Date.now();
-  feed.style.display = 'block';
-  document.getElementById('cam-placeholder').style.display = 'none';
-  document.getElementById('scan-line').style.display = 'block';
-  document.getElementById('btn-start').style.display = 'none';
-  document.getElementById('btn-stop').style.display = 'inline-flex';
-  document.getElementById('live-badge').classList.add('on');
+// WebRTC Camera 
+let stream = null;
+let recognitionInterval = null;
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d');
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 480, height: 360, facingMode: 'user' },
+      audio: false
+    });
+
+    const video = document.getElementById('cam-video');
+    video.srcObject = stream;
+    video.style.display = 'block';
+    document.getElementById('cam-placeholder').style.display = 'none';
+    document.getElementById('scan-line').style.display = 'block';
+    document.getElementById('btn-start').style.display = 'none';
+    document.getElementById('btn-stop').style.display = 'inline-flex';
+    document.getElementById('live-badge').classList.add('on');
+
+    recognitionInterval = setInterval(sendFrame, 300);
+
+  } catch (err) {
+    toast('Camera access denied or not available.', 'error');
+    console.error('Camera error:', err);
+  }
 }
 
 function stopCamera() {
-  fetch('/stop_camera', { method: 'POST' });
-  const feed = document.getElementById('cam-feed');
-  feed.src = '';
-  feed.style.display = 'none';
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+  if (recognitionInterval) {
+    clearInterval(recognitionInterval);
+    recognitionInterval = null;
+  }
+
+  const video = document.getElementById('cam-video');
+  video.srcObject = null;
+  video.style.display = 'none';
+
+  const overlay = document.getElementById('cam-overlay');
+  const oc = overlay.getContext('2d');
+  oc.clearRect(0, 0, overlay.width, overlay.height);
+
   document.getElementById('cam-placeholder').style.display = 'flex';
   document.getElementById('scan-line').style.display = 'none';
   document.getElementById('btn-start').style.display = 'inline-flex';
@@ -41,7 +81,64 @@ function stopCamera() {
   document.getElementById('live-badge').classList.remove('on');
 }
 
-// Attendance 
+//  Send frame to server for recognition
+let processing = false;
+
+async function sendFrame() {
+  if (processing) return;
+  const video = document.getElementById('cam-video');
+  if (!video.srcObject || video.readyState < 2) return;
+
+  processing = true;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+  const frameData = canvas.toDataURL('image/jpeg', 0.7);
+
+  try {
+    const res = await fetch('/process_frame', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ frame: frameData })
+    });
+    const data = await res.json();
+    drawOverlay(data.faces, video.videoWidth, video.videoHeight);
+  } catch (e) {
+    console.error('Frame error:', e);
+  }
+  processing = false;
+}
+
+// Draw face boxes on canvas overlay 
+function drawOverlay(faces, vw, vh) {
+  const overlay = document.getElementById('cam-overlay');
+  overlay.width = vw;
+  overlay.height = vh;
+  const oc = overlay.getContext('2d');
+  oc.clearRect(0, 0, vw, vh);
+
+  faces.forEach(f => {
+    const color = f.name !== 'UNKNOWN' ? '#00e5a0' : '#0044ff';
+    const bw = f.x2 - f.x1;
+
+    oc.strokeStyle = color;
+    oc.lineWidth = 2;
+    oc.strokeRect(f.x1, f.y1, bw, f.y2 - f.y1);
+
+    oc.fillStyle = color;
+    oc.fillRect(f.x1, f.y2 - 28, bw, 28);
+
+    oc.fillStyle = f.name !== 'UNKNOWN' ? '#000' : '#fff';
+    oc.font = 'bold 13px monospace';
+    oc.fillText(f.name, f.x1 + 6, f.y2 - 10);
+  });
+
+  if (faces.some(f => f.name !== 'UNKNOWN')) {
+    loadAttendance();
+  }
+}
+
+//  Attendance 
 let allRecords = [];
 
 async function loadAttendance() {
@@ -63,7 +160,7 @@ function updateStats(records) {
 function renderTable(records) {
   const tbody = document.getElementById('att-body');
   if (!records.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No attendance records yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No attendance records yet.</td></tr>';
     return;
   }
   tbody.innerHTML = records.map((r, i) => `
@@ -72,6 +169,18 @@ function renderTable(records) {
       <td><span class="badge-name">${r.Name}</span></td>
       <td>${r.Time}</td>
       <td>${r.Date}</td>
+      <td>
+        <button class="del-att-btn" title="Delete record"
+          onclick="deleteAttendanceRecord('${r.Name}', '${r.Time}', '${r.Date}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/>
+            <path d="M9 6V4h6v2"/>
+          </svg>
+        </button>
+      </td>
     </tr>
   `).join('');
 }
@@ -86,6 +195,30 @@ function filterTable() {
 
 function exportCSV() {
   window.location.href = '/export_csv';
+}
+
+//  Delete single attendance record 
+async function deleteAttendanceRecord(name, time, date) {
+  if (!confirm(`Delete attendance record for ${name} at ${time} on ${date}?`)) return;
+
+  const res = await fetch('/delete_attendance', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, time, date })
+  });
+  const data = await res.json();
+  toast(data.message || data.error, res.ok ? 'success' : 'error');
+  if (res.ok) loadAttendance();
+}
+
+// Clear all attendance records 
+async function clearAllAttendance() {
+  if (!confirm('Are you sure you want to delete ALL attendance records? This cannot be undone.')) return;
+
+  const res = await fetch('/clear_attendance', { method: 'POST' });
+  const data = await res.json();
+  toast(data.message || data.error, res.ok ? 'success' : 'error');
+  if (res.ok) loadAttendance();
 }
 
 // Persons 
