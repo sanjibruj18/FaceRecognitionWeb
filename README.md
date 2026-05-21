@@ -37,7 +37,7 @@ python app.py
 
 ### 5. Open browser
 ```
-http://localhost:5000
+https://faceattend.duckdns.org/
 ```
 
 ## Tech Stack
